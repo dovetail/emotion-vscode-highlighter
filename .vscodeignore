@@ -1,0 +1,30 @@
+# Source files (we only need compiled JS)
+src/**
+test/**
+debug-examples/**
+*.tsx
+*.ts
+
+# Development files
+.vscode/**
+.vscode-test/**
+**/*.test.*
+jest.config.js
+tsconfig.json
+
+# Build artifacts we don't want
+**/*.d.ts
+**/*.map
+test-emotion-debug.*
+
+# Documentation (keep README.md, exclude others)
+IMPLEMENTATION_PLAN.md
+
+# Package management
+package-lock.json
+.npmignore
+.gitignore
+
+# OS files
+.DS_Store
+Thumbs.db 

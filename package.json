@@ -1,0 +1,163 @@
+{
+  "name": "emotion-styled-highlighter",
+  "displayName": "Emotion Styled Component Highlighter",
+  "description": "Highlights emotion styled components in JSX/TSX files for better visual distinction",
+  "version": "0.1.0",
+  "publisher": "emotion-highlighter",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onLanguage:typescript",
+    "onLanguage:typescriptreact",
+    "onLanguage:javascript",
+    "onLanguage:javascriptreact"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "emotionHighlighter.test",
+        "title": "Test Extension",
+        "category": "Emotion Highlighter"
+      },
+      {
+        "command": "emotionHighlighter.testTokens",
+        "title": "Test Tokens (Manual)",
+        "category": "Emotion Highlighter"
+      },
+      {
+        "command": "emotionHighlighter.clearCache",
+        "title": "Clear Cache",
+        "category": "Emotion Highlighter"
+      },
+      {
+        "command": "emotionHighlighter.showCacheStats",
+        "title": "Show Cache Stats",
+        "category": "Emotion Highlighter"
+      },
+      {
+        "command": "emotionHighlighter.toggle",
+        "title": "Toggle Highlighting",
+        "category": "Emotion Highlighter"
+      },
+      {
+        "command": "emotionHighlighter.applyColors",
+        "title": "Apply Color Settings",
+        "category": "Emotion Highlighter"
+      },
+      {
+        "command": "emotionHighlighter.showColorConfig",
+        "title": "Show Color Configuration",
+        "category": "Emotion Highlighter"
+      },
+      {
+        "command": "emotionHighlighter.toggleTypeChecking",
+        "title": "Toggle TypeScript Type Checking",
+        "category": "Emotion Highlighter"
+      },
+      {
+        "command": "emotionHighlighter.showTypeCheckingStats",
+        "title": "Show TypeScript Type Checking Stats",
+        "category": "Emotion Highlighter"
+      }
+    ],
+    "configuration": {
+      "title": "Emotion Highlighter",
+      "properties": {
+        "emotionHighlighter.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable emotion styled component highlighting"
+        },
+        "emotionHighlighter.highlightColor": {
+          "type": "string",
+          "default": "#FF6B6B",
+          "description": "Color for emotion styled components (hex color code)",
+          "pattern": "^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$"
+        },
+        "emotionHighlighter.fontStyle": {
+          "type": "string",
+          "enum": ["normal", "bold", "italic", "bold italic"],
+          "default": "normal",
+          "description": "Font style for emotion styled components"
+        },
+        "emotionHighlighter.underline": {
+          "type": "boolean",
+          "default": false,
+          "description": "Add underline to emotion styled components"
+        },
+        "emotionHighlighter.useTypeChecking": {
+          "type": "boolean",
+          "default": true,
+          "description": "Use TypeScript type information to detect styled components (requires TypeScript project)"
+        },
+        "emotionHighlighter.detectImportedComponents": {
+          "type": "boolean",
+          "default": true,
+          "description": "Detect styled components imported from other files using type information"
+        },
+        "emotionHighlighter.typeCheckingCache": {
+          "type": "boolean",
+          "default": true,
+          "description": "Cache type checking results for better performance"
+        }
+      }
+    },
+    "semanticTokenTypes": [
+      {
+        "id": "emotionStyledComponent",
+        "description": "Emotion styled component"
+      }
+    ],
+    "semanticTokenStyleDefaults": [
+      {
+        "selector": "emotionStyledComponent",
+        "scope": [
+          "support.class.component.emotion"
+        ]
+      }
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/emotion-highlighter/emotion-styled-highlighter"
+  },
+  "scripts": {
+    "fullInstall": "npx vsce package --dependencies && code --install-extension emotion-styled-highlighter-0.1.0.vsix",
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts",
+    "test": "jest"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/node": "20.x",
+    "@types/vscode": "^1.74.0",
+    "@typescript-eslint/eslint-plugin": "^8.35.0",
+    "@typescript-eslint/parser": "^8.35.0",
+    "@vscode/test-electron": "^2.3.4",
+    "@vscode/vsce": "^3.6.0",
+    "eslint": "^9.30.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.2"
+  },
+  "dependencies": {
+    "typescript": "^5.1.6"
+  },
+  "keywords": [
+    "emotion",
+    "styled-components",
+    "jsx",
+    "tsx",
+    "highlighting",
+    "syntax"
+  ],
+  "author": "VS Code Extension Developer",
+  "license": "MIT"
+}
