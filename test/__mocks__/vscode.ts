@@ -31,6 +31,7 @@ export class Uri {
   public path: string;
   public query: string;
   public fragment: string;
+  public fsPath: string;
 
   constructor(
     scheme: string,
@@ -44,6 +45,7 @@ export class Uri {
     this.path = path;
     this.query = query;
     this.fragment = fragment;
+    this.fsPath = path; // Add fsPath property
   }
 
   static file(path: string): Uri {
@@ -182,6 +184,12 @@ export const workspace = {
   }),
   textDocuments: [],
   onDidChangeConfiguration: () => ({ dispose: () => {} }),
+  getWorkspaceFolder: (uri: Uri) => ({
+    uri: Uri.file(process.cwd()),
+    name: "test-workspace",
+    index: 0
+  }),
+  rootPath: process.cwd(),
 };
 
 // Mock window
@@ -208,6 +216,26 @@ export const languages = {
 // Mock commands
 export const commands = {
   registerCommand: () => ({ dispose: () => {} }),
+  executeCommand: async <T>(command: string, ...args: any[]): Promise<T> => {
+    console.log(`[Mock] executeCommand: ${command} with args:`, args);
+    
+    if (command === 'vscode.executeTypeDefinitionProvider') {
+      const [uri, position] = args;
+      console.log(`[Mock] Type definition request for ${uri.path} at ${position.line}:${position.character}`);
+      
+      // Mock response for LocalContainer2 - simulate that VS Code finds its type definition in @emotion/styled
+      if (uri.path.includes('test-cross-file-type-checking') && position.line === 4 && position.character === 15) {
+        return [{
+          uri: Uri.file('/Users/noviny/Development/emotion-vscode-highlighter/node_modules/@emotion/styled/dist/emotion-styled.cjs.d.ts'),
+          range: new Range(0, 0, 0, 10)
+        }] as any;
+      }
+      
+      return [] as any;
+    }
+    
+    return undefined as any;
+  }
 };
 
 // Mock enums and constants

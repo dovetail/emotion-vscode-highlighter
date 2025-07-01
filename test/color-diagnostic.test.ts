@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 
 describe("Color Configuration Diagnostic Tests", () => {
   
-  it("it("DIAGNOSTIC: Check VS Code semantic token configuration format", async () => {", async () => {
+  it("DIAGNOSTIC: Check VS Code semantic token configuration format", async () => {
     // Test the exact format VS Code expects
     const userConfig = {
       highlightColor: "#ff69b4",
@@ -50,7 +50,7 @@ describe("Color Configuration Diagnostic Tests", () => {
     console.log(JSON.stringify(alternativeFormats, null, 2));
   });
 
-  it("it("DIAGNOSTIC: Test semantic token type registration", async () => {", async () => {
+  it("DIAGNOSTIC: Test semantic token type registration", async () => {
     // Check if our token type is properly registered
     const expectedTokenTypes = ["emotionStyledComponent"];
     const expectedSemanticTokenDefaults = [
@@ -67,7 +67,7 @@ describe("Color Configuration Diagnostic Tests", () => {
     expect(expectedTokenTypes).toContain("emotionStyledComponent");
   });
 
-  it("it("DIAGNOSTIC: Test color application scenarios", async () => {", async () => {
+  it("DIAGNOSTIC: Test color application scenarios", async () => {
     const scenarios = [
       {
         name: "Pink Bold Underlined",
@@ -103,7 +103,7 @@ describe("Color Configuration Diagnostic Tests", () => {
     });
   });
 
-  it("it("DIAGNOSTIC: Verify semantic token encoding", async () => {", async () => {
+  it("DIAGNOSTIC: Verify semantic token encoding", async () => {
     // Test how semantic tokens should be encoded for VS Code
     const mockTokenData = [
       // [line, character, length, tokenType, tokenModifiers]
@@ -122,7 +122,7 @@ describe("Color Configuration Diagnostic Tests", () => {
     expect(semanticTokens.data.length).toBe(10);
   });
 
-  it("it("DIAGNOSTIC: Check current VS Code settings format", async () => {", async () => {
+  it("DIAGNOSTIC: Check current VS Code settings format", async () => {
     // Show exactly what should go in settings.json
     const settingsJsonContent = {
       "editor.semanticHighlighting.enabled": true,
@@ -150,7 +150,7 @@ describe("Color Configuration Diagnostic Tests", () => {
     console.log("5. Check if colors apply immediately");
   });
 
-  it("it("DIAGNOSTIC: Test theme compatibility", async () => {", async () => {
+  it("DIAGNOSTIC: Test theme compatibility", async () => {
     const popularThemes = [
       "Default Dark+",
       "Default Light+", 
@@ -177,7 +177,7 @@ describe("Color Configuration Diagnostic Tests", () => {
     console.log(JSON.stringify(themeSpecificConfig, null, 2));
   });
 
-  it("it("DIAGNOSTIC: Check semantic highlighting prerequisites", async () => {", async () => {
+  it("DIAGNOSTIC: Check semantic highlighting prerequisites", async () => {
     const prerequisites = {
       "editor.semanticHighlighting.enabled": true,
       "editor.colorDecorators": true,

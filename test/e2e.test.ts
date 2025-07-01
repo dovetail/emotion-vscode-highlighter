@@ -152,7 +152,7 @@ describe("End-to-End Color Configuration Tests", () => {
       console.log("E2E Test - Semantic tokens data length:", semanticTokens.data.length);
     });
 
-    it("it("E2E: Should generate correct color configuration for different settings", async () => {", async () => {
+    it("E2E: Should generate correct color configuration for different settings", async () => {
       const testCases = [
         {
           color: "#ff69b4",
@@ -280,7 +280,7 @@ describe("End-to-End Color Configuration Tests", () => {
   });
 
   describe("Color Configuration Validation", () => {
-    it("it("Should validate hex color patterns", async () => {", async () => {
+    it("Should validate hex color patterns", async () => {
       const validColors = ["#ff69b4", "#FF69B4", "#f69", "#F69", "#000000", "#ffffff"];
       const invalidColors = ["ff69b4", "#gg69b4", "#12345", "red", "rgb(255,0,0)"];
 
@@ -297,7 +297,7 @@ describe("End-to-End Color Configuration Tests", () => {
       });
     });
 
-         it("it("Should generate correct VS Code configuration structure", async () => {", async () => {
+         it("Should generate correct VS Code configuration structure", async () => {
        const testColor = "#ff69b4";
        const testFontStyle: string = "bold";
        const testUnderline = true;

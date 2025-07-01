@@ -17,6 +17,13 @@ const LocalContainer = styled.div`
   padding: 20px;
 `;
 
+export const LocalContainer2 = styled.div({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 10,
+  padding: 20,
+});
+
 // Function that returns a styled component
 function createStyledInput() {
   return styled.input`
@@ -52,7 +59,7 @@ export default function TypeCheckingTest() {
   return (
     <LocalContainer>
       <ImportedHeader>Type Checking Test</ImportedHeader>
-      
+      <LocalContainer2 />
       <ImportedCard>
         <p>This card tests type-based detection of styled components.</p>
         

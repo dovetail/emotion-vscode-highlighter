@@ -1,23 +1,24 @@
 import styled from '@emotion/styled';
 
-const Button = styled.button`
-  background: pink;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 4px;
+const StyledButton = styled.button`
+  background: blue;
+  color: white;
 `;
 
-const Container = styled.div`
+const StyledDiv = styled.div`
   padding: 20px;
+  margin: 10px;
 `;
 
-function App() {
+function TestComponent() {
   return (
-    <Container>
-      <Button>Click me!</Button>
-      <Button>Another button</Button>
-    </Container>
+    <div>
+      <StyledButton>Click me</StyledButton>
+      <StyledDiv>
+        <p>Content inside styled div</p>
+      </StyledDiv>
+    </div>
   );
 }
 
-export default App; 
+export default TestComponent; 

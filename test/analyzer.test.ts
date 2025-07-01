@@ -104,7 +104,7 @@ describe("EmotionAnalyzer", () => {
   });
 
   describe("Basic styled component detection", () => {
-    it("it("should detect basic emotion styled components", async () => {", async () => {
+    it("should detect basic emotion styled components", async () => {
       const code = `
         import styled from '@emotion/styled';
         
@@ -126,7 +126,7 @@ describe("EmotionAnalyzer", () => {
       expect(result.importInfo.styledIdentifier).toBe("styled");
     });
 
-    it("it("should detect styled-components imports", async () => {", async () => {
+    it("should detect styled-components imports", async () => {
       const code = `
         import styled from 'styled-components';
         
@@ -142,7 +142,7 @@ describe("EmotionAnalyzer", () => {
       expect(result.importInfo.hasStyledComponentsImport).toBe(true);
     });
 
-    it("it("should detect styled components with function call syntax", async () => {", async () => {
+    it("should detect styled components with function call syntax", async () => {
       const code = `
         import styled from '@emotion/styled';
         
@@ -162,7 +162,7 @@ describe("EmotionAnalyzer", () => {
       expect(result.styledComponents.has("StyledDiv")).toBe(true);
     });
 
-    it("it("should detect component extensions", async () => {", async () => {
+    it("should detect component extensions", async () => {
       const code = `
         import styled from '@emotion/styled';
         
@@ -184,7 +184,7 @@ describe("EmotionAnalyzer", () => {
   });
 
   describe("Import handling", () => {
-    it("it("should handle aliased imports", async () => {", async () => {
+    it("should handle aliased imports", async () => {
       const code = `
         import styledComponent from '@emotion/styled';
         
@@ -200,7 +200,7 @@ describe("EmotionAnalyzer", () => {
       expect(result.importInfo.styledIdentifier).toBe("styledComponent");
     });
 
-    it("it("should handle named imports", async () => {", async () => {
+    it("should handle named imports", async () => {
       const code = `
         import { styled } from '@emotion/styled';
         
@@ -217,7 +217,7 @@ describe("EmotionAnalyzer", () => {
   });
 
   describe("JSX usage detection", () => {
-    it("it("should find styled component usage in JSX", async () => {", async () => {
+    it("should find styled component usage in JSX", async () => {
       const code = `
         import styled from '@emotion/styled';
         
@@ -247,7 +247,7 @@ describe("EmotionAnalyzer", () => {
       ).toBe(true);
     });
 
-    it("it("should handle self-closing JSX elements", async () => {", async () => {
+    it("should handle self-closing JSX elements", async () => {
       const code = `
         import styled from '@emotion/styled';
         
@@ -269,7 +269,7 @@ describe("EmotionAnalyzer", () => {
   });
 
   describe("Performance and edge cases", () => {
-    it("it("should return empty result for files without emotion imports", async () => {", async () => {
+    it("should return empty result for files without emotion imports", async () => {
       const code = `
         import React from 'react';
         
@@ -284,7 +284,7 @@ describe("EmotionAnalyzer", () => {
       expect(result.importInfo.hasEmotionImport).toBe(false);
     });
 
-    it("it("should handle empty files", async () => {", async () => {
+    it("should handle empty files", async () => {
       const document = new MockTextDocument("");
       const result = await analyzer.analyze(document);
 
@@ -292,7 +292,7 @@ describe("EmotionAnalyzer", () => {
       expect(result.tokens.length).toBe(0);
     });
 
-    it("it("should handle syntax errors gracefully", async () => {", async () => {
+    it("should handle syntax errors gracefully", async () => {
       const code = `
         import styled from '@emotion/styled';
         
@@ -307,7 +307,7 @@ describe("EmotionAnalyzer", () => {
       expect(() => analyzer.analyze(document)).not.toThrow();
     });
 
-    it("it("should use cache for repeated analysis", async () => {", async () => {
+    it("should use cache for repeated analysis", async () => {
       const code = `
         import styled from '@emotion/styled';
         const Button = styled.div\`color: red;\`;
@@ -326,7 +326,7 @@ describe("EmotionAnalyzer", () => {
   });
 
   describe("Complex scenarios", () => {
-    it("it("should handle multiple imports and complex component definitions", async () => {", async () => {
+    it("should handle multiple imports and complex component definitions", async () => {
       const code = `
         import styled from '@emotion/styled';
         import { css } from '@emotion/react';
@@ -371,7 +371,7 @@ describe("EmotionAnalyzer", () => {
   });
 
   describe("Focused Input/Output Tests - Object Style Components", () => {
-    it("it("should detect object-style styled components: styled.div({...})", async () => {", async () => {
+    it("should detect object-style styled components: styled.div({...})", async () => {
       const code = `
         import styled from '@emotion/styled';
         
@@ -390,7 +390,7 @@ describe("EmotionAnalyzer", () => {
       expect(result.importInfo.styledIdentifier).toBe("styled");
     });
 
-    it("it("should detect function call syntax: styled('div')({...})", async () => {", async () => {
+    it("should detect function call syntax: styled('div')({...})", async () => {
       const code = `
         import styled from '@emotion/styled';
         
@@ -406,7 +406,7 @@ describe("EmotionAnalyzer", () => {
       expect(result.styledComponents.has("CustomDiv")).toBe(true);
     });
 
-    it("it("should detect multiple object-style components in one file", async () => {", async () => {
+    it("should detect multiple object-style components in one file", async () => {
       const code = `
         import styled from '@emotion/styled';
         
@@ -436,7 +436,7 @@ describe("EmotionAnalyzer", () => {
   });
 
   describe("Focused Input/Output Tests - JSX Tokenization", () => {
-    it("it("should generate exactly one token for one JSX element usage", async () => {", async () => {
+    it("should generate exactly one token for one JSX element usage", async () => {
       const code = `
         import styled from '@emotion/styled';
         
@@ -465,7 +465,7 @@ describe("EmotionAnalyzer", () => {
       });
     });
 
-    it("it("should generate exactly two tokens for two JSX element usages", async () => {", async () => {
+    it("should generate exactly two tokens for two JSX element usages", async () => {
       const code = `
         import styled from '@emotion/styled';
         
@@ -495,7 +495,7 @@ describe("EmotionAnalyzer", () => {
       });
     });
 
-    it("it("should handle self-closing JSX elements", async () => {", async () => {
+    it("should handle self-closing JSX elements", async () => {
       const code = `
         import styled from '@emotion/styled';
         
@@ -518,7 +518,7 @@ describe("EmotionAnalyzer", () => {
       expect(result.tokens[0].length).toBe(5); // "Input".length
     });
 
-    it("it("should distinguish styled components from regular JSX", async () => {", async () => {
+    it("should distinguish styled components from regular JSX", async () => {
       const code = `
         import styled from '@emotion/styled';
         import React from 'react';
@@ -550,7 +550,7 @@ describe("EmotionAnalyzer", () => {
   });
 
   describe("Focused Input/Output Tests - Mixed Syntax", () => {
-    it("it("should handle template literals, function calls, and object syntax together", async () => {", async () => {
+    it("should handle template literals, function calls, and object syntax together", async () => {
       const code = `
         import styled from '@emotion/styled';
         
@@ -598,7 +598,7 @@ describe("EmotionAnalyzer", () => {
   });
 
   describe("Focused Input/Output Tests - Import Variations", () => {
-    it("it("should handle aliased imports correctly", async () => {", async () => {
+    it("should handle aliased imports correctly", async () => {
       const code = `
         import myStyled from '@emotion/styled';
         
@@ -620,7 +620,7 @@ describe("EmotionAnalyzer", () => {
       expect(result.tokens.length).toBe(2); // opening + closing tags
     });
 
-    it("it("should handle styled-components library", async () => {", async () => {
+    it("should handle styled-components library", async () => {
       const code = `
         import styled from 'styled-components';
         
@@ -655,7 +655,7 @@ describe("Closing Tag Support Tests", () => {
     analyzer.clearCache();
   });
 
-  it("it("should highlight both opening and closing tags", async () => {", async () => {
+  it("should highlight both opening and closing tags", async () => {
     const code = `
       import styled from '@emotion/styled';
       
@@ -689,7 +689,7 @@ describe("Closing Tag Support Tests", () => {
     expect(tokenPositions[0]).not.toEqual(tokenPositions[1]); // Different positions
   });
 
-  it("it("should highlight multiple components with opening and closing tags", async () => {", async () => {
+  it("should highlight multiple components with opening and closing tags", async () => {
     const code = `
       import styled from '@emotion/styled';
       
@@ -721,7 +721,7 @@ describe("Closing Tag Support Tests", () => {
     });
   });
 
-  it("it("should handle self-closing tags correctly (no closing tag needed)", async () => {", async () => {
+  it("should handle self-closing tags correctly (no closing tag needed)", async () => {
     const code = `
       import styled from '@emotion/styled';
       

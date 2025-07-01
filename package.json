@@ -11,117 +11,36 @@
     "Other"
   ],
   "activationEvents": [
-    "onStartupFinished",
-    "onLanguage:typescript",
     "onLanguage:typescriptreact",
-    "onLanguage:javascript",
     "onLanguage:javascriptreact"
   ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "emotionHighlighter.test",
-        "title": "Test Extension",
-        "category": "Emotion Highlighter"
-      },
-      {
-        "command": "emotionHighlighter.testTokens",
-        "title": "Test Tokens (Manual)",
-        "category": "Emotion Highlighter"
-      },
-      {
         "command": "emotionHighlighter.clearCache",
         "title": "Clear Cache",
         "category": "Emotion Highlighter"
       },
       {
-        "command": "emotionHighlighter.showCacheStats",
-        "title": "Show Cache Stats",
-        "category": "Emotion Highlighter"
-      },
-      {
-        "command": "emotionHighlighter.toggle",
-        "title": "Toggle Highlighting",
-        "category": "Emotion Highlighter"
-      },
-      {
-        "command": "emotionHighlighter.applyColors",
-        "title": "Apply Color Settings",
-        "category": "Emotion Highlighter"
-      },
-      {
-        "command": "emotionHighlighter.showColorConfig",
-        "title": "Show Color Configuration",
-        "category": "Emotion Highlighter"
-      },
-      {
-        "command": "emotionHighlighter.toggleTypeChecking",
-        "title": "Toggle TypeScript Type Checking",
-        "category": "Emotion Highlighter"
-      },
-      {
-        "command": "emotionHighlighter.showTypeCheckingStats",
-        "title": "Show TypeScript Type Checking Stats",
+        "command": "emotionHighlighter.toggleHighlighting",
+        "title": "🔄 Toggle Styled Component Highlighting",
         "category": "Emotion Highlighter"
       }
     ],
     "configuration": {
       "title": "Emotion Highlighter",
       "properties": {
-        "emotionHighlighter.enabled": {
-          "type": "boolean",
+        "editor.styledComponentHighlighting.enabled": {
+          "type": [
+            "boolean",
+            "string"
+          ],
           "default": true,
-          "description": "Enable emotion styled component highlighting"
-        },
-        "emotionHighlighter.highlightColor": {
-          "type": "string",
-          "default": "#FF6B6B",
-          "description": "Color for emotion styled components (hex color code)",
-          "pattern": "^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$"
-        },
-        "emotionHighlighter.fontStyle": {
-          "type": "string",
-          "enum": ["normal", "bold", "italic", "bold italic"],
-          "default": "normal",
-          "description": "Font style for emotion styled components"
-        },
-        "emotionHighlighter.underline": {
-          "type": "boolean",
-          "default": false,
-          "description": "Add underline to emotion styled components"
-        },
-        "emotionHighlighter.useTypeChecking": {
-          "type": "boolean",
-          "default": true,
-          "description": "Use TypeScript type information to detect styled components (requires TypeScript project)"
-        },
-        "emotionHighlighter.detectImportedComponents": {
-          "type": "boolean",
-          "default": true,
-          "description": "Detect styled components imported from other files using type information"
-        },
-        "emotionHighlighter.typeCheckingCache": {
-          "type": "boolean",
-          "default": true,
-          "description": "Cache type checking results for better performance"
+          "markdownDescription": "Enable styled component highlighting. Set to `true` for default color, `false` to disable, or a hex color like `#FF69B4` for custom color."
         }
       }
-    },
-    "semanticTokenTypes": [
-      {
-        "id": "emotionStyledComponent",
-        "description": "Emotion styled component"
-      }
-    ],
-    "semanticTokenStyleDefaults": [
-      {
-        "selector": "emotionStyledComponent",
-        "scope": [
-          "support.class.component.emotion"
-        ]
-      }
-    ]
+    }
   },
   "repository": {
     "type": "git",
@@ -138,6 +57,8 @@
   "devDependencies": {
     "@types/jest": "^29.5.12",
     "@types/node": "20.x",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
     "@types/vscode": "^1.74.0",
     "@typescript-eslint/eslint-plugin": "^8.35.0",
     "@typescript-eslint/parser": "^8.35.0",
@@ -148,6 +69,8 @@
     "ts-jest": "^29.1.2"
   },
   "dependencies": {
+    "@emotion/styled": "^11.14.1",
+    "react": "^19.1.0",
     "typescript": "^5.1.6"
   },
   "keywords": [

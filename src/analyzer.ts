@@ -21,40 +21,18 @@ export class EmotionAnalyzer {
   private readonly TYPE_CACHE_DURATION = 60000; // 1 minute for type results
 
   constructor() {
-    vscode.window.showInformationMessage("🚀 ANALYZER CONSTRUCTOR START");
-    
-    try {
-      vscode.window.showInformationMessage("🔨 Analyzer: Step A - Starting initialization");
-      
-      vscode.window.showInformationMessage("🔨 Analyzer: Step B - Testing TypeScript import");
-      if (!ts) {
-        throw new Error("TypeScript module not available");
-      }
-      vscode.window.showInformationMessage("✅ Analyzer: Step B - TypeScript available");
-      
-      vscode.window.showInformationMessage("🔨 Analyzer: Step C - Testing basic TS functionality");
-      const testTarget = ts.ScriptTarget.Latest;
-      vscode.window.showInformationMessage(`✅ Analyzer: Step C - TS ScriptTarget: ${testTarget}`);
-      
-      vscode.window.showInformationMessage("🔨 Analyzer: Step D - Initialization complete");
-    } catch (error) {
-      vscode.window.showErrorMessage(`❌ Analyzer: Initialization failed at: ${error}`);
-      throw error;
+    if (!ts) {
+      throw new Error("TypeScript module not available");
     }
-    
-    vscode.window.showInformationMessage("🎉 ANALYZER CONSTRUCTOR END");
   }
 
   public async analyze(document: vscode.TextDocument): Promise<ExtendedAnalysisResult> {
     const startTime = performance.now();
     
-    vscode.window.showInformationMessage(`📋 ANALYZER: Starting analysis for ${document.fileName.split('/').pop()}`);
-
     // Check cache first
     const cacheKey = this.getCacheKey(document);
     const cached = this.cache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < this.CACHE_DURATION) {
-      vscode.window.showInformationMessage('💾 Using cached result');
       return cached.result;
     }
 
@@ -62,9 +40,20 @@ export class EmotionAnalyzer {
     const typeCheckingOptions = this.getTypeCheckingOptions();
     
     // Early exit if file doesn't contain emotion patterns
+    // BUT allow type checking to run even without direct emotion patterns
+    // since we might have imported styled components
     const text = document.getText();
-    if (!this.hasEmotionPatterns(text)) {
-      vscode.window.showInformationMessage('❌ No emotion patterns found in file');
+    console.log(`[Analyzer] Checking file: ${document.fileName}`);
+    console.log(`[Analyzer] File content preview: ${text.substring(0, 200)}...`);
+    
+    const hasPatterns = this.hasEmotionPatterns(text);
+    console.log(`[Analyzer] Has emotion patterns: ${hasPatterns}`);
+    console.log(`[Analyzer] Type checking enabled: ${typeCheckingOptions.enabled}`);
+    
+    // Only exit early if no patterns AND type checking is disabled
+    // If type checking is enabled, we should continue to detect imported styled components
+    if (!hasPatterns && !typeCheckingOptions.enabled) {
+      console.log(`[Analyzer] Early exit: no patterns and no type checking`);
       const emptyResult: ExtendedAnalysisResult = {
         styledComponents: new Set(),
         importInfo: {
@@ -80,8 +69,6 @@ export class EmotionAnalyzer {
       return emptyResult;
     }
     
-    vscode.window.showInformationMessage('✅ Emotion patterns found, proceeding with analysis');
-
     const parseStartTime = performance.now();
     const sourceFile = this.createSourceFile(document);
     const parseTime = performance.now() - parseStartTime;
@@ -89,8 +76,10 @@ export class EmotionAnalyzer {
     const analysisStartTime = performance.now();
     const importInfo = this.analyzeImports(sourceFile);
 
-    if (!importInfo.hasEmotionImport && !importInfo.hasStyledComponentsImport) {
-      vscode.window.showInformationMessage('❌ No emotion/styled-components imports found');
+    // Only exit early if no emotion imports AND type checking is disabled
+    // If type checking is enabled, we should continue to detect imported styled components
+    if (!importInfo.hasEmotionImport && !importInfo.hasStyledComponentsImport && !typeCheckingOptions.enabled) {
+      console.log(`[Analyzer] Early exit: no emotion imports and no type checking`);
       const emptyResult: ExtendedAnalysisResult = {
         styledComponents: new Set(),
         importInfo,
@@ -102,12 +91,8 @@ export class EmotionAnalyzer {
       return emptyResult;
     }
     
-    vscode.window.showInformationMessage(`✅ Found imports: emotion=${importInfo.hasEmotionImport}, styled-components=${importInfo.hasStyledComponentsImport}`);
-
     const styledComponents = this.findStyledComponents(sourceFile, importInfo);
     const analysisTime = performance.now() - analysisStartTime;
-
-    vscode.window.showInformationMessage(`🎯 Found ${styledComponents.size} styled components: ${Array.from(styledComponents).join(', ')}`);
 
     const tokenizationStartTime = performance.now();
     let tokens: EmotionToken[] = [];
@@ -117,9 +102,9 @@ export class EmotionAnalyzer {
     // Enhanced token finding with type checking
     if (typeCheckingOptions.enabled) {
       const typeCheckingStartTime = performance.now();
-      const enhancedResult = await this.findStyledComponentUsageWithTypes(
+      console.log(`[Analyzer] Using VS Code's TypeScript service for type checking`);
+      const enhancedResult = await this.findStyledComponentUsageWithVSCodeTypes(
         document,
-        sourceFile, 
         styledComponents, 
         typeCheckingOptions
       );
@@ -140,8 +125,6 @@ export class EmotionAnalyzer {
       typeCheckingStats,
     };
     
-    vscode.window.showInformationMessage(`🎉 Analysis complete! Generated ${tokens.length} tokens`);
-
     // Cache the result
     this.cache.set(cacheKey, { result, timestamp: Date.now() });
 
@@ -166,31 +149,307 @@ export class EmotionAnalyzer {
     };
   }
 
+  private async getVSCodeTypeInformation(document: vscode.TextDocument, position: vscode.Position): Promise<string | null> {
+    try {
+      // Use VS Code's built-in TypeScript service to get type definitions
+      const typeDefinitions = await vscode.commands.executeCommand<vscode.LocationLink[] | vscode.Location[]>(
+        'vscode.executeTypeDefinitionProvider',
+        document.uri,
+        position
+      );
+      
+      if (typeDefinitions && typeDefinitions.length > 0) {
+        // If we have type definitions, we know this is a typed symbol
+        // For styled components, we can check if the type definition comes from @emotion/styled
+        const firstDef = typeDefinitions[0];
+        let typeUri: vscode.Uri;
+        
+        if ('targetUri' in firstDef) {
+          typeUri = firstDef.targetUri;
+        } else if ('uri' in firstDef) {
+          typeUri = firstDef.uri;
+        } else {
+          return null;
+        }
+        
+        const typeFilePath = typeUri.fsPath || typeUri.path;
+        console.log(`[VSCode Type Checking] Type definition found at: ${typeFilePath}`);
+        
+        // Check if the type comes from @emotion/styled or similar
+        if (typeFilePath.includes('@emotion/styled') || 
+            typeFilePath.includes('emotion-styled') ||
+            typeFilePath.includes('styled-components')) {
+          return 'StyledComponent'; // Simplified return to indicate it's a styled component
+        }
+      }
+      
+      return null;
+    } catch (error) {
+      console.warn('[VSCode TypeScript Service] Error getting type definition:', error);
+      return null;
+    }
+  }
+
+  private async findStyledComponentUsageWithVSCodeTypes(
+    document: vscode.TextDocument,
+    styledComponents: Set<string>,
+    options: TypeCheckingOptions
+  ): Promise<{
+    tokens: EmotionToken[];
+    stats: {
+      totalChecked: number;
+      cacheHits: number;
+      cacheMisses: number;
+    };
+  }> {
+    const tokens: EmotionToken[] = [];
+    const stats = { totalChecked: 0, cacheHits: 0, cacheMisses: 0 };
+    
+    try {
+      const text = document.getText();
+      
+      // Find JSX elements using regex (simpler approach since we're using VS Code's type checking)
+      const jsxRegex = /<(\w+)(?:\s[^>]*)?\s*\/?>/g;
+      let match;
+      
+      while ((match = jsxRegex.exec(text)) !== null) {
+        const componentName = match[1];
+        
+        // Skip HTML elements (start with lowercase)
+        if (componentName[0].toLowerCase() === componentName[0]) {
+          continue;
+        }
+        
+        stats.totalChecked++;
+        
+        const startPos = match.index + 1; // +1 to skip the '<'
+        const position = document.positionAt(startPos);
+        
+        console.log(`[VSCode Type Checking] Checking component: ${componentName} at position ${position.line}:${position.character}`);
+        
+        // Method 1: Check if it's a known styled component from AST analysis
+        const isKnownStyledComponent = styledComponents.has(componentName);
+        
+        // Method 2: Get type information from VS Code's TypeScript service
+        let isStyledComponentByType = false;
+        if (options.detectImportedComponents) {
+          const typeInfo = await this.getVSCodeTypeInformation(document, position);
+          
+          if (typeInfo) {
+            console.log(`[VSCode Type Checking] ${componentName} type: ${typeInfo}`);
+            isStyledComponentByType = this.isVSCodeTypeStyledComponent(typeInfo);
+          } else {
+            console.log(`[VSCode Type Checking] No type info available for ${componentName}`);
+          }
+        }
+        
+        if (isKnownStyledComponent || isStyledComponentByType) {
+          console.log(`[VSCode Type Checking] ${componentName} is styled component: true (AST: ${isKnownStyledComponent}, Type: ${isStyledComponentByType})`);
+          
+          const token: EmotionToken = {
+            line: position.line,
+            character: position.character,
+            length: componentName.length,
+            tokenType: "emotionStyledComponent",
+          };
+          tokens.push(token);
+        } else {
+          console.log(`[VSCode Type Checking] ${componentName} is styled component: false`);
+        }
+      }
+      
+      return { tokens, stats };
+    } catch (error) {
+      console.error('[VSCode Type Checking] Error in VS Code type-based analysis:', error);
+      return { tokens, stats };
+    }
+  }
+
+  private isVSCodeTypeStyledComponent(typeInfo: string): boolean {
+    // Since we now return 'StyledComponent' when the type definition is from @emotion/styled,
+    // we just need to check if we got a result indicating it's a styled component
+    return typeInfo === 'StyledComponent';
+  }
+
   private async getTypeScriptService(document: vscode.TextDocument): Promise<{
     program: ts.Program | null;
     typeChecker: ts.TypeChecker | null;
   }> {
     try {
-      // Try to get TypeScript service from VSCode
-      // This is a simplified approach - in production, we'd want to use
-      // the actual Language Server Protocol or VSCode's TypeScript service
+      // Get workspace folder to resolve tsconfig.json
+      const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+      const rootPath = workspaceFolder?.uri.fsPath || vscode.workspace.rootPath;
+      console.log(`[TypeScript Service] rootPath: ${rootPath}`);
       
-      // For now, we'll create our own program from the document
-      // This is less ideal but works as a starting point
-      const compilerOptions: ts.CompilerOptions = {
+      let compilerOptions: ts.CompilerOptions = {
         target: ts.ScriptTarget.Latest,
         module: ts.ModuleKind.ESNext,
         moduleResolution: ts.ModuleResolutionKind.NodeJs,
         allowJs: true,
-        jsx: ts.JsxEmit.React,
+        jsx: ts.JsxEmit.ReactJSX,
         esModuleInterop: true,
         skipLibCheck: true,
         strict: false,
+        lib: ["ES2020", "DOM"],
+        allowSyntheticDefaultImports: true,
+        resolveJsonModule: true,
+        // Override rootDir to allow analysis of files outside the main source directory
+        rootDir: rootPath,
+        // Add module resolution paths
+        baseUrl: rootPath,
+        paths: {
+          "*": ["node_modules/*", "node_modules/@types/*"]
+        },
+        typeRoots: [
+          rootPath + "/node_modules/@types",
+          rootPath + "/node_modules"
+        ]
       };
 
-      // Create program with the current file
-      const program = ts.createProgram([document.fileName], compilerOptions);
+      // Try to read tsconfig.json from the workspace
+      if (rootPath) {
+        const tsconfigPath = ts.findConfigFile(rootPath, ts.sys.fileExists, 'tsconfig.json');
+        if (tsconfigPath) {
+          const configFile = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
+          if (!configFile.error) {
+            const parsedConfig = ts.parseJsonConfigFileContent(
+              configFile.config,
+              ts.sys,
+              rootPath
+            );
+            if (!parsedConfig.errors.length) {
+              compilerOptions = { 
+                ...compilerOptions, 
+                ...parsedConfig.options,
+                // Always override rootDir to allow cross-file analysis
+                rootDir: rootPath
+              };
+            }
+          }
+        }
+      }
+
+      // For cross-file type checking, we need to include related files
+      // Start with the current file and try to find related files
+      const filesToInclude = [document.fileName];
+      
+      // If this is a test file that imports from other files, try to include them
+      const sourceCode = document.getText();
+      const importMatches = sourceCode.match(/import.*from\s+['"]\.\/([^'"]+)['"]/g);
+      if (importMatches && rootPath) {
+        console.log(`[TypeScript Service] Found ${importMatches.length} import matches in ${document.fileName}`);
+        for (const importMatch of importMatches) {
+          const pathMatch = importMatch.match(/from\s+['"]\.\/([^'"]+)['"]/);
+          if (pathMatch) {
+            const relativePath = pathMatch[1];
+            console.log(`[TypeScript Service] Trying to resolve import: ${relativePath}`);
+            // Try common extensions
+            const extensions = ['.tsx', '.ts', '.jsx', '.js'];
+            for (const ext of extensions) {
+              const fullPath = vscode.Uri.file(rootPath + '/' + relativePath + ext).fsPath;
+              console.log(`[TypeScript Service] Checking if file exists: ${fullPath}`);
+              try {
+                const exists = ts.sys.fileExists(fullPath);
+                console.log(`[TypeScript Service] File exists result: ${exists}`);
+                if (exists) {
+                  console.log(`[TypeScript Service] Found file: ${fullPath}`);
+                  filesToInclude.push(fullPath);
+                  break;
+                } else {
+                  console.log(`[TypeScript Service] File not found: ${fullPath}`);
+                }
+              } catch (e) {
+                console.warn(`[TypeScript Service] Error checking file ${fullPath}:`, e);
+              }
+            }
+          }
+        }
+      }
+
+      console.log(`[TypeScript Service] Creating program with files: ${filesToInclude.join(', ')}`);
+      
+      // Create program with multiple files for cross-file resolution
+      const program = ts.createProgram(filesToInclude, compilerOptions);
       const typeChecker = program.getTypeChecker();
+      
+      // Debug: check exports and imports resolution
+      const programSourceFiles = program.getSourceFiles();
+      programSourceFiles.forEach(sf => {
+                if (sf.fileName.includes('test-type-checking.tsx')) {
+          console.log(`[DEBUG] Checking ${sf.fileName}`);
+          
+          // Check imports
+          sf.forEachChild(node => {
+            if (ts.isImportDeclaration(node) && node.moduleSpecifier) {
+              const moduleSpecifier = (node.moduleSpecifier as ts.StringLiteral).text;
+              console.log(`[DEBUG] Import: ${moduleSpecifier}`);
+              
+              if (moduleSpecifier === '@emotion/styled') {
+                const moduleSymbol = typeChecker.getSymbolAtLocation(node.moduleSpecifier);
+                console.log(`[DEBUG] @emotion/styled symbol: ${moduleSymbol ? 'found' : 'NOT FOUND'}`);
+              }
+            }
+            
+            // Check exports
+            if (ts.isVariableStatement(node) && node.modifiers?.some(m => m.kind === ts.SyntaxKind.ExportKeyword)) {
+              node.declarationList.declarations.forEach(decl => {
+                if (ts.isIdentifier(decl.name) && decl.name.text === 'LocalContainer2') {
+                  console.log(`[DEBUG] Found LocalContainer2 export at position: ${decl.getStart()}`);
+                  const exportType = typeChecker.getTypeAtLocation(decl.name);
+                  const exportTypeString = typeChecker.typeToString(exportType);
+                  console.log(`[DEBUG] LocalContainer2 export type: "${exportTypeString}"`);
+                }
+              });
+            }
+          });
+        }
+        
+        // Also check the importing file
+        if (sf.fileName.includes('test-cross-file-type-checking.tsx')) {
+          console.log(`[DEBUG] Checking importing file: ${sf.fileName}`);
+          sf.forEachChild(node => {
+            if (ts.isImportDeclaration(node) && node.importClause?.namedBindings) {
+              if (ts.isNamedImports(node.importClause.namedBindings)) {
+                node.importClause.namedBindings.elements.forEach(element => {
+                  if (element.name.text === 'LocalContainer2') {
+                    console.log(`[DEBUG] Found LocalContainer2 import`);
+                    const importSymbol = typeChecker.getSymbolAtLocation(element.name);
+                    console.log(`[DEBUG] Import symbol: ${importSymbol ? 'found' : 'NOT FOUND'}`);
+                    if (importSymbol) {
+                      const importType = typeChecker.getTypeOfSymbolAtLocation(importSymbol, element.name);  
+                      const importTypeString = typeChecker.typeToString(importType);
+                      console.log(`[DEBUG] Import type: "${importTypeString}"`);
+                    }
+                  }
+                });
+              }
+            }
+          });
+        }
+      });
+      
+      // Debug: show all source files in the program
+      const sourceFiles = program.getSourceFiles();
+      console.log(`[TypeScript Service] Program includes ${sourceFiles.length} source files:`);
+      sourceFiles.forEach(sf => {
+        if (!sf.fileName.includes('node_modules') && !sf.fileName.includes('lib.')) {
+          console.log(`[TypeScript Service] - ${sf.fileName}`);
+        }
+      });
+      
+      // Check for any TypeScript errors
+      const diagnostics = ts.getPreEmitDiagnostics(program);
+      if (diagnostics.length > 0) {
+        console.warn(`[TypeScript Service] Program has ${diagnostics.length} diagnostics`);
+        diagnostics.slice(0, 5).forEach((diagnostic, index) => {
+          const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n');
+          const file = diagnostic.file ? diagnostic.file.fileName : 'unknown';
+          const line = diagnostic.file && diagnostic.start 
+            ? diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start).line + 1 
+            : 'unknown';
+          console.warn(`[TypeScript Service] ${index + 1}. ${file}:${line} - ${message}`);
+        });
+      }
 
       return { program, typeChecker };
     } catch (error) {
@@ -218,10 +477,8 @@ export class EmotionAnalyzer {
     // Get TypeScript service
     const { typeChecker } = await this.getTypeScriptService(document);
     
-    vscode.window.showInformationMessage(`🔍 Enhanced JSX analysis - TypeChecker: ${typeChecker ? 'Available' : 'Not Available'}`);
-
     const visitNode = (node: ts.Node) => {
-      if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+      if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node) || ts.isJsxClosingElement(node)) {
         const tagName = node.tagName;
         if (ts.isIdentifier(tagName)) {
           stats.totalChecked++;
@@ -229,11 +486,11 @@ export class EmotionAnalyzer {
           // Method 1: Existing AST-based detection
           const isKnownStyledComponent = styledComponents.has(tagName.text);
           
-          // Method 2: Type-based detection
+          // Method 2: Type-based detection (only for opening/self-closing elements since closing elements don't have type info)
           let isStyledComponentByType = false;
-          if (typeChecker && options.detectImportedComponents) {
+          if (typeChecker && options.detectImportedComponents && !ts.isJsxClosingElement(node)) {
             const typeResult = this.checkStyledComponentType(
-              node, 
+              node as ts.JsxOpeningElement | ts.JsxSelfClosingElement, 
               tagName, 
               typeChecker, 
               options.cacheTypeResults
@@ -257,7 +514,6 @@ export class EmotionAnalyzer {
             
             const method = isKnownStyledComponent && isStyledComponentByType ? 'both' :
                           isKnownStyledComponent ? 'ast' : 'type';
-            vscode.window.showInformationMessage(`✅ Found styled component: ${tagName.text} (${method})`);
           }
         }
       }
@@ -267,7 +523,6 @@ export class EmotionAnalyzer {
 
     visitNode(sourceFile);
     
-    vscode.window.showInformationMessage(`🏷️ Enhanced analysis complete: ${tokens.length} tokens, ${stats.totalChecked} checked`);
     return { tokens, stats };
   }
 
@@ -290,10 +545,85 @@ export class EmotionAnalyzer {
 
     try {
       // Get the type of the JSX element
-      const type = typeChecker.getTypeAtLocation(tagName);
+      // For cross-file imports, we need to get the symbol first, then its type
+      const tagSymbol = typeChecker.getSymbolAtLocation(tagName);
+      let type: ts.Type;
+      let typeString: string;
       
-      // Check if it's a styled component type
+      if (tagSymbol) {
+        // Get the type from the symbol (works better for cross-file imports)
+        type = typeChecker.getTypeOfSymbolAtLocation(tagSymbol, tagName);
+        typeString = typeChecker.typeToString(type);
+        
+        // Debug for LocalContainer2
+        if (tagName.text === 'LocalContainer2') {
+          console.log(`[DEBUG] Symbol-based lookup used`);
+          console.log(`[DEBUG] Symbol name: ${tagSymbol.getName()}`);  
+          console.log(`[DEBUG] Symbol flags: ${tagSymbol.flags}`);
+          if (tagSymbol.valueDeclaration) {
+            console.log(`[DEBUG] Symbol declared in: ${tagSymbol.valueDeclaration.getSourceFile().fileName}`);
+          }
+        }
+      } else {
+        // Fallback to direct type lookup
+        type = typeChecker.getTypeAtLocation(tagName);
+        typeString = typeChecker.typeToString(type);
+        
+        if (tagName.text === 'LocalContainer2') {
+          console.log(`[DEBUG] Direct type lookup used (no symbol found)`);
+        }
+      }
+      
+      // Special debugging for LocalContainer2
+      if (tagName.text === 'LocalContainer2') {
+        console.log(`[DEBUG] LocalContainer2 detailed analysis:`);
+        console.log(`[DEBUG] JSX element position: ${jsxNode.getStart()}-${jsxNode.getEnd()}`);
+        console.log(`[DEBUG] Tag name position: ${tagName.getStart()}-${tagName.getEnd()}`);
+        console.log(`[DEBUG] Type string: "${typeString}"`);
+        console.log(`[DEBUG] Type flags: ${type.flags}`);
+        console.log(`[DEBUG] Type symbol: ${type.getSymbol()?.getName() || 'none'}`);
+        
+        // Try to get the identifier separately
+        const identifierSymbol = typeChecker.getSymbolAtLocation(tagName);
+        console.log(`[DEBUG] Identifier symbol: ${identifierSymbol?.getName() || 'none'}`);
+        if (identifierSymbol) {
+          const identifierType = typeChecker.getTypeOfSymbolAtLocation(identifierSymbol, tagName);
+          const identifierTypeString = typeChecker.typeToString(identifierType);
+          console.log(`[DEBUG] Identifier type: "${identifierTypeString}"`);
+        }
+        
+        // Try to get more detailed type information
+        const symbol = type.getSymbol();
+        if (symbol) {
+          console.log(`[DEBUG] Symbol flags: ${symbol.flags}`);
+          console.log(`[DEBUG] Symbol value declaration: ${symbol.valueDeclaration?.kind || 'none'}`);
+          if (symbol.valueDeclaration) {
+            const sourceFile = symbol.valueDeclaration.getSourceFile();
+            console.log(`[DEBUG] Declared in: ${sourceFile.fileName}`);
+          }
+        }
+        
+        // Check if the type has StyledComponent characteristics
+        console.log(`[DEBUG] Type string contains 'StyledComponent': ${typeString.includes('StyledComponent')}`);
+        console.log(`[DEBUG] Type string contains 'emotion': ${typeString.includes('emotion')}`);
+      }
+      
+             console.log(`[Type Checking] ${tagName.text} type: ${typeString}`);
+       
+       // Get symbol information for all components
+       const symbol = type.getSymbol();
+       if (symbol) {
+         console.log(`[Type Checking] ${tagName.text} symbol: ${symbol.getName()}`);
+         if (symbol.valueDeclaration) {
+           const sourceFile = symbol.valueDeclaration.getSourceFile();
+           console.log(`[Type Checking] ${tagName.text} declared in: ${sourceFile.fileName}`);
+         }
+       }
+       
+       // Check if it's a styled component type
       const isStyledComponent = this.isTypeStyledComponent(type, typeChecker);
+      
+      console.log(`[Type Checking] ${tagName.text} is styled component: ${isStyledComponent}`);
       
       const result: TypeCheckingResult = {
         isStyledComponent,
@@ -592,8 +922,6 @@ export class EmotionAnalyzer {
     const tokens: EmotionToken[] = [];
     const jsxElementsFound: string[] = [];
     
-    vscode.window.showInformationMessage(`🔍 Looking for JSX usage of: ${Array.from(styledComponents).join(', ')}`);
-
     const visitNode = (node: ts.Node) => {
       // Look for JSX elements that match our styled components
       if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node) || ts.isJsxClosingElement(node)) {
@@ -621,26 +949,11 @@ export class EmotionAnalyzer {
 
     visitNode(sourceFile);
     
-    vscode.window.showInformationMessage(`🏷️ JSX elements found: ${jsxElementsFound.join(', ')} | Tokens: ${tokens.length}`);
     return tokens;
   }
 
   private logPerformanceMetrics(metrics: PerformanceMetrics): void {
-    // Only log if performance is concerning
-    if (metrics.totalTime > 50) {
-      const logData: any = {
-        parseTime: `${metrics.parseTime.toFixed(2)}ms`,
-        analysisTime: `${metrics.analysisTime.toFixed(2)}ms`,
-        tokenizationTime: `${metrics.tokenizationTime.toFixed(2)}ms`,
-        totalTime: `${metrics.totalTime.toFixed(2)}ms`,
-      };
-      
-      if (metrics.typeCheckingTime !== undefined) {
-        logData.typeCheckingTime = `${metrics.typeCheckingTime.toFixed(2)}ms`;
-      }
-      
-      console.log("Emotion Analyzer Performance:", logData);
-    }
+    // Performance logging removed for production
   }
 
   public clearCache(): void {
