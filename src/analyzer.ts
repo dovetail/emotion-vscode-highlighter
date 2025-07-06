@@ -1,13 +1,9 @@
 import * as ts from "typescript";
 import * as vscode from "vscode";
 import {
-  AnalysisResult,
-  EMOTION_IMPORT_PATTERNS,
   EmotionToken,
   ImportInfo,
-  PerformanceMetrics,
   TypeCheckingOptions, 
-  TypeCheckingResult,
   ExtendedAnalysisResult
 } from "./types";
 
@@ -16,9 +12,7 @@ export class EmotionAnalyzer {
     string,
     { result: ExtendedAnalysisResult; timestamp: number }
   >();
-  private typeCache = new Map<string, TypeCheckingResult>();
   private readonly CACHE_DURATION = 30000; // 30 seconds
-  private readonly TYPE_CACHE_DURATION = 60000; // 1 minute for type results
 
   constructor() {
     if (!ts) {
@@ -36,24 +30,12 @@ export class EmotionAnalyzer {
       return cached.result;
     }
 
-    // Get configuration for type checking
+    const text = document.getText();
     const typeCheckingOptions = this.getTypeCheckingOptions();
     
-    // Early exit if file doesn't contain emotion patterns
-    // BUT allow type checking to run even without direct emotion patterns
-    // since we might have imported styled components
-    const text = document.getText();
-    console.log(`[Analyzer] Checking file: ${document.fileName}`);
-    console.log(`[Analyzer] File content preview: ${text.substring(0, 200)}...`);
-    
-    const hasPatterns = this.hasEmotionPatterns(text);
-    console.log(`[Analyzer] Has emotion patterns: ${hasPatterns}`);
-    console.log(`[Analyzer] Type checking enabled: ${typeCheckingOptions.enabled}`);
-    
-    // Only exit early if no patterns AND type checking is disabled
-    // If type checking is enabled, we should continue to detect imported styled components
-    if (!hasPatterns && !typeCheckingOptions.enabled) {
-      console.log(`[Analyzer] Early exit: no patterns and no type checking`);
+    // OPTIMIZATION 1: Fast JSX check - exit immediately if no JSX elements
+    if (!this.hasJSXElements(text)) {
+      console.log(`[Analyzer] Early exit: no JSX elements found`);
       const emptyResult: ExtendedAnalysisResult = {
         styledComponents: new Set(),
         importInfo: {
@@ -64,78 +46,38 @@ export class EmotionAnalyzer {
         tokens: [],
         typeCheckingEnabled: typeCheckingOptions.enabled,
       };
-
       this.cache.set(cacheKey, { result: emptyResult, timestamp: Date.now() });
       return emptyResult;
     }
-    
-    const parseStartTime = performance.now();
-    const sourceFile = this.createSourceFile(document);
-    const parseTime = performance.now() - parseStartTime;
 
-    const analysisStartTime = performance.now();
-    const importInfo = this.analyzeImports(sourceFile);
+    // OPTIMIZATION 2: Use optimized single-pass analysis for all files 
+    const lines = text.split('\n').length;
+    console.log(`[Analyzer] Using optimized single-pass analysis (${lines} lines)`);
+    const result = await this.analyzeRegular(document);
 
-    // Only exit early if no emotion imports AND type checking is disabled
-    // If type checking is enabled, we should continue to detect imported styled components
-    if (!importInfo.hasEmotionImport && !importInfo.hasStyledComponentsImport && !typeCheckingOptions.enabled) {
-      console.log(`[Analyzer] Early exit: no emotion imports and no type checking`);
-      const emptyResult: ExtendedAnalysisResult = {
+    // OPTIMIZATION 3: Early exit after single-pass if no styled components or imports found
+    if (!typeCheckingOptions.enabled && 
+        result.styledComponents.size === 0 && 
+        !result.importInfo.hasEmotionImport && 
+        !result.importInfo.hasStyledComponentsImport) {
+      console.log(`[Analyzer] Early exit: no styled components or emotion imports found`);
+      
+      // Return minimal result for better performance
+      const minimalResult: ExtendedAnalysisResult = {
         styledComponents: new Set(),
-        importInfo,
+        importInfo: result.importInfo,
         tokens: [],
         typeCheckingEnabled: typeCheckingOptions.enabled,
       };
-
-      this.cache.set(cacheKey, { result: emptyResult, timestamp: Date.now() });
-      return emptyResult;
+      this.cache.set(cacheKey, { result: minimalResult, timestamp: Date.now() });
+      return minimalResult;
     }
-    
-    const styledComponents = this.findStyledComponents(sourceFile, importInfo);
-    const analysisTime = performance.now() - analysisStartTime;
-
-    const tokenizationStartTime = performance.now();
-    let tokens: EmotionToken[] = [];
-    let typeCheckingTime = 0;
-    let typeCheckingStats = undefined;
-
-    // Enhanced token finding with type checking
-    if (typeCheckingOptions.enabled) {
-      const typeCheckingStartTime = performance.now();
-      console.log(`[Analyzer] Using VS Code's TypeScript service for type checking`);
-      const enhancedResult = await this.findStyledComponentUsageWithVSCodeTypes(
-        document,
-        styledComponents, 
-        typeCheckingOptions
-      );
-      tokens = enhancedResult.tokens;
-      typeCheckingStats = enhancedResult.stats;
-      typeCheckingTime = performance.now() - typeCheckingStartTime;
-    } else {
-      tokens = this.findStyledComponentUsage(sourceFile, styledComponents);
-    }
-
-    const tokenizationTime = performance.now() - tokenizationStartTime;
-
-    const result: ExtendedAnalysisResult = {
-      styledComponents,
-      importInfo,
-      tokens,
-      typeCheckingEnabled: typeCheckingOptions.enabled,
-      typeCheckingStats,
-    };
     
     // Cache the result
     this.cache.set(cacheKey, { result, timestamp: Date.now() });
 
     const totalTime = performance.now() - startTime;
-    this.logPerformanceMetrics({
-      parseTime,
-      analysisTime,
-      tokenizationTime,
-      totalTime,
-      typeCheckingTime,
-    });
+    console.log(`[Analyzer] Total analysis time: ${totalTime.toFixed(2)}ms for ${lines} lines`);
 
     return result;
   }
@@ -208,12 +150,13 @@ export class EmotionAnalyzer {
     try {
       const text = document.getText();
       
-      // Find JSX elements using regex (simpler approach since we're using VS Code's type checking)
-      const jsxRegex = /<(\w+)(?:\s[^>]*)?\s*\/?>/g;
+      // Find JSX elements using regex (both opening and closing tags)
+      const jsxRegex = /<(\/?)?(\w+)(?:\s[^>]*)?\s*\/?>/g;
       let match;
       
       while ((match = jsxRegex.exec(text)) !== null) {
-        const componentName = match[1];
+        const isClosing = match[1] === '/';
+        const componentName = match[2];
         
         // Skip HTML elements (start with lowercase)
         if (componentName[0].toLowerCase() === componentName[0]) {
@@ -222,7 +165,8 @@ export class EmotionAnalyzer {
         
         stats.totalChecked++;
         
-        const startPos = match.index + 1; // +1 to skip the '<'
+        // Calculate position of the component name (skip '<' and optional '/')
+        const startPos = match.index + 1 + (isClosing ? 1 : 0); // +1 for '<', +1 more for '/' if closing
         const position = document.positionAt(startPos);
         
         console.log(`[VSCode Type Checking] Checking component: ${componentName} at position ${position.line}:${position.character}`);
@@ -271,471 +215,8 @@ export class EmotionAnalyzer {
     return typeInfo === 'StyledComponent';
   }
 
-  private async getTypeScriptService(document: vscode.TextDocument): Promise<{
-    program: ts.Program | null;
-    typeChecker: ts.TypeChecker | null;
-  }> {
-    try {
-      // Get workspace folder to resolve tsconfig.json
-      const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
-      const rootPath = workspaceFolder?.uri.fsPath || vscode.workspace.rootPath;
-      console.log(`[TypeScript Service] rootPath: ${rootPath}`);
-      
-      let compilerOptions: ts.CompilerOptions = {
-        target: ts.ScriptTarget.Latest,
-        module: ts.ModuleKind.ESNext,
-        moduleResolution: ts.ModuleResolutionKind.NodeJs,
-        allowJs: true,
-        jsx: ts.JsxEmit.ReactJSX,
-        esModuleInterop: true,
-        skipLibCheck: true,
-        strict: false,
-        lib: ["ES2020", "DOM"],
-        allowSyntheticDefaultImports: true,
-        resolveJsonModule: true,
-        // Override rootDir to allow analysis of files outside the main source directory
-        rootDir: rootPath,
-        // Add module resolution paths
-        baseUrl: rootPath,
-        paths: {
-          "*": ["node_modules/*", "node_modules/@types/*"]
-        },
-        typeRoots: [
-          rootPath + "/node_modules/@types",
-          rootPath + "/node_modules"
-        ]
-      };
-
-      // Try to read tsconfig.json from the workspace
-      if (rootPath) {
-        const tsconfigPath = ts.findConfigFile(rootPath, ts.sys.fileExists, 'tsconfig.json');
-        if (tsconfigPath) {
-          const configFile = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
-          if (!configFile.error) {
-            const parsedConfig = ts.parseJsonConfigFileContent(
-              configFile.config,
-              ts.sys,
-              rootPath
-            );
-            if (!parsedConfig.errors.length) {
-              compilerOptions = { 
-                ...compilerOptions, 
-                ...parsedConfig.options,
-                // Always override rootDir to allow cross-file analysis
-                rootDir: rootPath
-              };
-            }
-          }
-        }
-      }
-
-      // For cross-file type checking, we need to include related files
-      // Start with the current file and try to find related files
-      const filesToInclude = [document.fileName];
-      
-      // If this is a test file that imports from other files, try to include them
-      const sourceCode = document.getText();
-      const importMatches = sourceCode.match(/import.*from\s+['"]\.\/([^'"]+)['"]/g);
-      if (importMatches && rootPath) {
-        console.log(`[TypeScript Service] Found ${importMatches.length} import matches in ${document.fileName}`);
-        for (const importMatch of importMatches) {
-          const pathMatch = importMatch.match(/from\s+['"]\.\/([^'"]+)['"]/);
-          if (pathMatch) {
-            const relativePath = pathMatch[1];
-            console.log(`[TypeScript Service] Trying to resolve import: ${relativePath}`);
-            // Try common extensions
-            const extensions = ['.tsx', '.ts', '.jsx', '.js'];
-            for (const ext of extensions) {
-              const fullPath = vscode.Uri.file(rootPath + '/' + relativePath + ext).fsPath;
-              console.log(`[TypeScript Service] Checking if file exists: ${fullPath}`);
-              try {
-                const exists = ts.sys.fileExists(fullPath);
-                console.log(`[TypeScript Service] File exists result: ${exists}`);
-                if (exists) {
-                  console.log(`[TypeScript Service] Found file: ${fullPath}`);
-                  filesToInclude.push(fullPath);
-                  break;
-                } else {
-                  console.log(`[TypeScript Service] File not found: ${fullPath}`);
-                }
-              } catch (e) {
-                console.warn(`[TypeScript Service] Error checking file ${fullPath}:`, e);
-              }
-            }
-          }
-        }
-      }
-
-      console.log(`[TypeScript Service] Creating program with files: ${filesToInclude.join(', ')}`);
-      
-      // Create program with multiple files for cross-file resolution
-      const program = ts.createProgram(filesToInclude, compilerOptions);
-      const typeChecker = program.getTypeChecker();
-      
-      // Debug: check exports and imports resolution
-      const programSourceFiles = program.getSourceFiles();
-      programSourceFiles.forEach(sf => {
-                if (sf.fileName.includes('test-type-checking.tsx')) {
-          console.log(`[DEBUG] Checking ${sf.fileName}`);
-          
-          // Check imports
-          sf.forEachChild(node => {
-            if (ts.isImportDeclaration(node) && node.moduleSpecifier) {
-              const moduleSpecifier = (node.moduleSpecifier as ts.StringLiteral).text;
-              console.log(`[DEBUG] Import: ${moduleSpecifier}`);
-              
-              if (moduleSpecifier === '@emotion/styled') {
-                const moduleSymbol = typeChecker.getSymbolAtLocation(node.moduleSpecifier);
-                console.log(`[DEBUG] @emotion/styled symbol: ${moduleSymbol ? 'found' : 'NOT FOUND'}`);
-              }
-            }
-            
-            // Check exports
-            if (ts.isVariableStatement(node) && node.modifiers?.some(m => m.kind === ts.SyntaxKind.ExportKeyword)) {
-              node.declarationList.declarations.forEach(decl => {
-                if (ts.isIdentifier(decl.name) && decl.name.text === 'LocalContainer2') {
-                  console.log(`[DEBUG] Found LocalContainer2 export at position: ${decl.getStart()}`);
-                  const exportType = typeChecker.getTypeAtLocation(decl.name);
-                  const exportTypeString = typeChecker.typeToString(exportType);
-                  console.log(`[DEBUG] LocalContainer2 export type: "${exportTypeString}"`);
-                }
-              });
-            }
-          });
-        }
-        
-        // Also check the importing file
-        if (sf.fileName.includes('test-cross-file-type-checking.tsx')) {
-          console.log(`[DEBUG] Checking importing file: ${sf.fileName}`);
-          sf.forEachChild(node => {
-            if (ts.isImportDeclaration(node) && node.importClause?.namedBindings) {
-              if (ts.isNamedImports(node.importClause.namedBindings)) {
-                node.importClause.namedBindings.elements.forEach(element => {
-                  if (element.name.text === 'LocalContainer2') {
-                    console.log(`[DEBUG] Found LocalContainer2 import`);
-                    const importSymbol = typeChecker.getSymbolAtLocation(element.name);
-                    console.log(`[DEBUG] Import symbol: ${importSymbol ? 'found' : 'NOT FOUND'}`);
-                    if (importSymbol) {
-                      const importType = typeChecker.getTypeOfSymbolAtLocation(importSymbol, element.name);  
-                      const importTypeString = typeChecker.typeToString(importType);
-                      console.log(`[DEBUG] Import type: "${importTypeString}"`);
-                    }
-                  }
-                });
-              }
-            }
-          });
-        }
-      });
-      
-      // Debug: show all source files in the program
-      const sourceFiles = program.getSourceFiles();
-      console.log(`[TypeScript Service] Program includes ${sourceFiles.length} source files:`);
-      sourceFiles.forEach(sf => {
-        if (!sf.fileName.includes('node_modules') && !sf.fileName.includes('lib.')) {
-          console.log(`[TypeScript Service] - ${sf.fileName}`);
-        }
-      });
-      
-      // Check for any TypeScript errors
-      const diagnostics = ts.getPreEmitDiagnostics(program);
-      if (diagnostics.length > 0) {
-        console.warn(`[TypeScript Service] Program has ${diagnostics.length} diagnostics`);
-        diagnostics.slice(0, 5).forEach((diagnostic, index) => {
-          const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n');
-          const file = diagnostic.file ? diagnostic.file.fileName : 'unknown';
-          const line = diagnostic.file && diagnostic.start 
-            ? diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start).line + 1 
-            : 'unknown';
-          console.warn(`[TypeScript Service] ${index + 1}. ${file}:${line} - ${message}`);
-        });
-      }
-
-      return { program, typeChecker };
-    } catch (error) {
-      console.warn("Failed to get TypeScript service:", error);
-      return { program: null, typeChecker: null };
-    }
-  }
-
-  private async findStyledComponentUsageWithTypes(
-    document: vscode.TextDocument,
-    sourceFile: ts.SourceFile,
-    styledComponents: Set<string>,
-    options: TypeCheckingOptions
-  ): Promise<{
-    tokens: EmotionToken[];
-    stats: {
-      totalChecked: number;
-      cacheHits: number;
-      cacheMisses: number;
-    };
-  }> {
-    const tokens: EmotionToken[] = [];
-    const stats = { totalChecked: 0, cacheHits: 0, cacheMisses: 0 };
-    
-    // Get TypeScript service
-    const { typeChecker } = await this.getTypeScriptService(document);
-    
-    const visitNode = (node: ts.Node) => {
-      if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node) || ts.isJsxClosingElement(node)) {
-        const tagName = node.tagName;
-        if (ts.isIdentifier(tagName)) {
-          stats.totalChecked++;
-          
-          // Method 1: Existing AST-based detection
-          const isKnownStyledComponent = styledComponents.has(tagName.text);
-          
-          // Method 2: Type-based detection (only for opening/self-closing elements since closing elements don't have type info)
-          let isStyledComponentByType = false;
-          if (typeChecker && options.detectImportedComponents && !ts.isJsxClosingElement(node)) {
-            const typeResult = this.checkStyledComponentType(
-              node as ts.JsxOpeningElement | ts.JsxSelfClosingElement, 
-              tagName, 
-              typeChecker, 
-              options.cacheTypeResults
-            );
-            isStyledComponentByType = typeResult.isStyledComponent;
-            
-            if (options.cacheTypeResults) {
-              typeResult.detectionMethod === 'cache' ? stats.cacheHits++ : stats.cacheMisses++;
-            }
-          }
-          
-          if (isKnownStyledComponent || isStyledComponentByType) {
-            const pos = sourceFile.getLineAndCharacterOfPosition(tagName.getStart());
-            const token: EmotionToken = {
-              line: pos.line,
-              character: pos.character,
-              length: tagName.text.length,
-              tokenType: "emotionStyledComponent",
-            };
-            tokens.push(token);
-            
-            const method = isKnownStyledComponent && isStyledComponentByType ? 'both' :
-                          isKnownStyledComponent ? 'ast' : 'type';
-          }
-        }
-      }
-      
-      ts.forEachChild(node, visitNode);
-    };
-
-    visitNode(sourceFile);
-    
-    return { tokens, stats };
-  }
-
-  private checkStyledComponentType(
-    jsxNode: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
-    tagName: ts.Identifier,
-    typeChecker: ts.TypeChecker,
-    useCache: boolean
-  ): TypeCheckingResult {
-    const cacheKey = `${tagName.text}-${jsxNode.getStart()}`;
-    
-    // Check cache first
-    if (useCache && this.typeCache.has(cacheKey)) {
-      const cached = this.typeCache.get(cacheKey)!;
-      // Check if cache entry is still valid
-      if (Date.now() - (cached as any).timestamp < this.TYPE_CACHE_DURATION) {
-        return { ...cached, detectionMethod: 'cache' as any };
-      }
-    }
-
-    try {
-      // Get the type of the JSX element
-      // For cross-file imports, we need to get the symbol first, then its type
-      const tagSymbol = typeChecker.getSymbolAtLocation(tagName);
-      let type: ts.Type;
-      let typeString: string;
-      
-      if (tagSymbol) {
-        // Get the type from the symbol (works better for cross-file imports)
-        type = typeChecker.getTypeOfSymbolAtLocation(tagSymbol, tagName);
-        typeString = typeChecker.typeToString(type);
-        
-        // Debug for LocalContainer2
-        if (tagName.text === 'LocalContainer2') {
-          console.log(`[DEBUG] Symbol-based lookup used`);
-          console.log(`[DEBUG] Symbol name: ${tagSymbol.getName()}`);  
-          console.log(`[DEBUG] Symbol flags: ${tagSymbol.flags}`);
-          if (tagSymbol.valueDeclaration) {
-            console.log(`[DEBUG] Symbol declared in: ${tagSymbol.valueDeclaration.getSourceFile().fileName}`);
-          }
-        }
-      } else {
-        // Fallback to direct type lookup
-        type = typeChecker.getTypeAtLocation(tagName);
-        typeString = typeChecker.typeToString(type);
-        
-        if (tagName.text === 'LocalContainer2') {
-          console.log(`[DEBUG] Direct type lookup used (no symbol found)`);
-        }
-      }
-      
-      // Special debugging for LocalContainer2
-      if (tagName.text === 'LocalContainer2') {
-        console.log(`[DEBUG] LocalContainer2 detailed analysis:`);
-        console.log(`[DEBUG] JSX element position: ${jsxNode.getStart()}-${jsxNode.getEnd()}`);
-        console.log(`[DEBUG] Tag name position: ${tagName.getStart()}-${tagName.getEnd()}`);
-        console.log(`[DEBUG] Type string: "${typeString}"`);
-        console.log(`[DEBUG] Type flags: ${type.flags}`);
-        console.log(`[DEBUG] Type symbol: ${type.getSymbol()?.getName() || 'none'}`);
-        
-        // Try to get the identifier separately
-        const identifierSymbol = typeChecker.getSymbolAtLocation(tagName);
-        console.log(`[DEBUG] Identifier symbol: ${identifierSymbol?.getName() || 'none'}`);
-        if (identifierSymbol) {
-          const identifierType = typeChecker.getTypeOfSymbolAtLocation(identifierSymbol, tagName);
-          const identifierTypeString = typeChecker.typeToString(identifierType);
-          console.log(`[DEBUG] Identifier type: "${identifierTypeString}"`);
-        }
-        
-        // Try to get more detailed type information
-        const symbol = type.getSymbol();
-        if (symbol) {
-          console.log(`[DEBUG] Symbol flags: ${symbol.flags}`);
-          console.log(`[DEBUG] Symbol value declaration: ${symbol.valueDeclaration?.kind || 'none'}`);
-          if (symbol.valueDeclaration) {
-            const sourceFile = symbol.valueDeclaration.getSourceFile();
-            console.log(`[DEBUG] Declared in: ${sourceFile.fileName}`);
-          }
-        }
-        
-        // Check if the type has StyledComponent characteristics
-        console.log(`[DEBUG] Type string contains 'StyledComponent': ${typeString.includes('StyledComponent')}`);
-        console.log(`[DEBUG] Type string contains 'emotion': ${typeString.includes('emotion')}`);
-      }
-      
-             console.log(`[Type Checking] ${tagName.text} type: ${typeString}`);
-       
-       // Get symbol information for all components
-       const symbol = type.getSymbol();
-       if (symbol) {
-         console.log(`[Type Checking] ${tagName.text} symbol: ${symbol.getName()}`);
-         if (symbol.valueDeclaration) {
-           const sourceFile = symbol.valueDeclaration.getSourceFile();
-           console.log(`[Type Checking] ${tagName.text} declared in: ${sourceFile.fileName}`);
-         }
-       }
-       
-       // Check if it's a styled component type
-      const isStyledComponent = this.isTypeStyledComponent(type, typeChecker);
-      
-      console.log(`[Type Checking] ${tagName.text} is styled component: ${isStyledComponent}`);
-      
-      const result: TypeCheckingResult = {
-        isStyledComponent,
-        confidence: isStyledComponent ? 'high' : 'low',
-        detectionMethod: 'type',
-      };
-      
-      // Cache the result
-      if (useCache) {
-        this.typeCache.set(cacheKey, { 
-          ...result, 
-          timestamp: Date.now() 
-        } as any);
-      }
-      
-      return result;
-    } catch (error) {
-      console.warn("Type checking failed for", tagName.text, error);
-      return {
-        isStyledComponent: false,
-        confidence: 'low',
-        detectionMethod: 'type',
-      };
-    }
-  }
-
-  private isTypeStyledComponent(type: ts.Type, typeChecker: ts.TypeChecker): boolean {
-    try {
-      // Get the symbol for this type
-      const symbol = type.getSymbol();
-      if (!symbol) return false;
-
-      // Check if the type has StyledComponent characteristics
-      // This is a heuristic approach since we can't easily check for exact StyledComponent interface
-      
-      // Method 1: Check if symbol name contains "Styled" 
-      const symbolName = symbol.getName();
-      if (symbolName.includes('Styled') || symbolName.includes('styled')) {
-        return true;
-      }
-
-      // Method 2: Check type string representation
-      const typeString = typeChecker.typeToString(type);
-      if (typeString.includes('StyledComponent') || 
-          typeString.includes('emotion') || 
-          typeString.includes('styled-components')) {
-        return true;
-      }
-
-      // Method 3: Check if it has typical styled component properties
-      // Styled components typically have properties like 'withComponent', 'attrs', etc.
-      const typeSymbol = type.getSymbol();
-      if (typeSymbol) {
-        const members = typeSymbol.members;
-        if (members) {
-          const hasStyledProps = ['withComponent', 'attrs', '__emotion_real'].some(
-            prop => members.has(prop as ts.__String)
-          );
-          if (hasStyledProps) {
-            return true;
-          }
-        }
-      }
-
-      // Method 4: Check for callable signatures that return JSX elements
-      const signatures = typeChecker.getSignaturesOfType(type, ts.SignatureKind.Call);
-      if (signatures.length > 0) {
-        const returnType = typeChecker.getReturnTypeOfSignature(signatures[0]);
-        const returnTypeString = typeChecker.typeToString(returnType);
-        if (returnTypeString.includes('JSX.Element') || returnTypeString.includes('ReactElement')) {
-          // This could be a styled component - check if it came from emotion/styled-components
-          return this.isTypeFromStyledLibrary(type, typeChecker);
-        }
-      }
-
-      return false;
-    } catch (error) {
-      console.warn("Error checking styled component type:", error);
-      return false;
-    }
-  }
-
-  private isTypeFromStyledLibrary(type: ts.Type, typeChecker: ts.TypeChecker): boolean {
-    try {
-      const symbol = type.getSymbol();
-      if (!symbol || !symbol.valueDeclaration) return false;
-
-      // Try to get the source file of the symbol
-      const sourceFile = symbol.valueDeclaration.getSourceFile();
-      if (!sourceFile) return false;
-
-      const fileName = sourceFile.fileName;
-      
-      // Check if it comes from emotion or styled-components modules
-      return fileName.includes('@emotion/styled') || 
-             fileName.includes('styled-components') ||
-             fileName.includes('emotion');
-    } catch (error) {
-      return false;
-    }
-  }
-
   private getCacheKey(document: vscode.TextDocument): string {
     return `${document.uri.toString()}-${document.version}`;
-  }
-
-  private hasEmotionPatterns(text: string): boolean {
-    return (
-      EMOTION_IMPORT_PATTERNS.some((pattern) => text.includes(pattern)) ||
-      text.includes("styled.") ||
-      text.includes("styled(")
-    );
   }
 
   private createSourceFile(document: vscode.TextDocument): ts.SourceFile {
@@ -920,15 +401,12 @@ export class EmotionAnalyzer {
     styledComponents: Set<string>
   ): EmotionToken[] {
     const tokens: EmotionToken[] = [];
-    const jsxElementsFound: string[] = [];
     
     const visitNode = (node: ts.Node) => {
       // Look for JSX elements that match our styled components
       if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node) || ts.isJsxClosingElement(node)) {
         const tagName = node.tagName;
         if (ts.isIdentifier(tagName)) {
-          jsxElementsFound.push(tagName.text);
-          
           if (styledComponents.has(tagName.text)) {
             const pos = sourceFile.getLineAndCharacterOfPosition(
               tagName.getStart()
@@ -952,13 +430,8 @@ export class EmotionAnalyzer {
     return tokens;
   }
 
-  private logPerformanceMetrics(metrics: PerformanceMetrics): void {
-    // Performance logging removed for production
-  }
-
   public clearCache(): void {
     this.cache.clear();
-    this.typeCache.clear();
   }
 
   public getCacheSize(): number {
@@ -966,6 +439,197 @@ export class EmotionAnalyzer {
   }
 
   public getTypeCacheSize(): number {
-    return this.typeCache.size;
+    return 0; // No type cache used in current implementation
+  }
+
+  /**
+   * OPTIMIZATION: Single-pass AST analysis that combines all analysis steps
+   * This replaces multiple separate traversals with one efficient pass
+   */
+  private analyzeSinglePass(sourceFile: ts.SourceFile): {
+    importInfo: ImportInfo;
+    styledComponents: Set<string>;
+    jsxElements: Array<{ tagName: string; node: ts.JsxOpeningElement | ts.JsxSelfClosingElement | ts.JsxClosingElement }>;
+    hasJSX: boolean;
+  } {
+    // Pre-allocate collections for better performance
+    const styledComponents = new Set<string>();
+    const jsxElements: Array<{ tagName: string; node: ts.JsxOpeningElement | ts.JsxSelfClosingElement | ts.JsxClosingElement }> = [];
+    
+    let hasEmotionImport = false;
+    let hasStyledComponentsImport = false;
+    let styledIdentifier = "styled";
+    let hasJSX = false;
+
+    // Single optimized traversal with early termination opportunities
+    const visitNode = (node: ts.Node): boolean => {
+      // OPTIMIZATION: Early node type filtering
+      const nodeKind = node.kind;
+      
+      // Skip nodes we don't care about for performance
+      if (this.shouldSkipNode(nodeKind)) {
+        return false; // Don't traverse children
+      }
+
+      // Process import declarations
+      if (ts.isImportDeclaration(node)) {
+        const moduleSpecifier = node.moduleSpecifier;
+        if (ts.isStringLiteral(moduleSpecifier)) {
+          const moduleName = moduleSpecifier.text;
+
+          if (moduleName === "@emotion/styled") {
+            hasEmotionImport = true;
+            styledIdentifier = this.extractStyledIdentifier(node) || "styled";
+          } else if (moduleName === "styled-components") {
+            hasStyledComponentsImport = true;
+            styledIdentifier = this.extractStyledIdentifier(node) || "styled";
+          }
+        }
+      }
+      
+      // Process styled component variable declarations
+      else if (ts.isVariableDeclaration(node) && node.name && ts.isIdentifier(node.name)) {
+        if (node.initializer && this.isStyledCall(node.initializer, styledIdentifier)) {
+          styledComponents.add(node.name.text);
+        }
+      }
+      
+      // Process function declarations that return styled components
+      else if (ts.isFunctionDeclaration(node) && node.name) {
+        if (node.body && this.functionReturnsStyledComponent(node.body, styledIdentifier)) {
+          styledComponents.add(node.name.text);
+        }
+      }
+      
+      // Process JSX elements
+      else if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node) || ts.isJsxClosingElement(node)) {
+        hasJSX = true;
+        const tagName = node.tagName;
+        if (ts.isIdentifier(tagName)) {
+          jsxElements.push({ tagName: tagName.text, node });
+        }
+      }
+
+      return true; // Continue traversal
+    };
+
+    // Perform traversal
+    const traverse = (currentNode: ts.Node): void => {
+      if (!visitNode(currentNode)) {
+        return; // Skip this subtree
+      }
+
+      // Continue traversing children
+      ts.forEachChild(currentNode, traverse);
+    };
+
+    traverse(sourceFile);
+
+    return {
+      importInfo: {
+        hasEmotionImport,
+        hasStyledComponentsImport,  
+        styledIdentifier,
+      },
+      styledComponents,
+      jsxElements,
+      hasJSX,
+    };
+  }
+
+  /**
+   * OPTIMIZATION: Skip irrelevant AST nodes early for performance
+   */
+  private shouldSkipNode(nodeKind: ts.SyntaxKind): boolean {
+    // Skip nodes that definitely don't contain what we're looking for
+    switch (nodeKind) {
+      case ts.SyntaxKind.StringLiteral:
+      case ts.SyntaxKind.NumericLiteral:
+      case ts.SyntaxKind.BigIntLiteral:
+      case ts.SyntaxKind.RegularExpressionLiteral:
+      case ts.SyntaxKind.NoSubstitutionTemplateLiteral:
+      case ts.SyntaxKind.TrueKeyword:
+      case ts.SyntaxKind.FalseKeyword:
+      case ts.SyntaxKind.NullKeyword:
+      case ts.SyntaxKind.UndefinedKeyword:
+      case ts.SyntaxKind.ThisKeyword:
+      case ts.SyntaxKind.SuperKeyword:
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * OPTIMIZATION: Fast JSX-only check using regex (much faster than AST parsing)
+   */
+  private hasJSXElements(text: string): boolean {
+    // Pre-compiled regex patterns for better performance
+    return this.jsxElementRegex.test(text);
+  }
+
+  // Pre-compiled regex patterns (class-level for reuse)
+  private readonly jsxElementRegex = /<\w+(?:\s[^>]*)?\s*\/?>/;
+
+  private generateTokensFromJSXElements(
+    jsxElements: Array<{ tagName: string; node: ts.JsxOpeningElement | ts.JsxSelfClosingElement | ts.JsxClosingElement }>,
+    styledComponents: Set<string>,
+    sourceFile: ts.SourceFile
+  ): EmotionToken[] {
+    const tokens: EmotionToken[] = [];
+    
+    for (const { tagName, node } of jsxElements) {
+      // OPTIMIZATION: Direct Set.has() lookup is O(1)
+      if (styledComponents.has(tagName)) {
+        const tagNameNode = node.tagName;
+        if (ts.isIdentifier(tagNameNode)) {
+          const pos = sourceFile.getLineAndCharacterOfPosition(tagNameNode.getStart());
+          tokens.push({
+            line: pos.line,
+            character: pos.character,
+            length: tagName.length,
+            tokenType: "emotionStyledComponent",
+          });
+        }
+      }
+    }
+    
+    return tokens;
+  }
+
+  /**
+   * OPTIMIZATION: Regular analysis method that uses single-pass optimization
+   */
+  private async analyzeRegular(document: vscode.TextDocument): Promise<ExtendedAnalysisResult> {
+    const sourceFile = this.createSourceFile(document);
+    const singlePassResult = this.analyzeSinglePass(sourceFile);
+    
+    const typeCheckingOptions = this.getTypeCheckingOptions();
+    let tokens: EmotionToken[] = [];
+    let typeCheckingStats = undefined;
+
+    if (typeCheckingOptions.enabled) {
+      const enhancedResult = await this.findStyledComponentUsageWithVSCodeTypes(
+        document,
+        singlePassResult.styledComponents,
+        typeCheckingOptions
+      );
+      tokens = enhancedResult.tokens;
+      typeCheckingStats = enhancedResult.stats;
+    } else {
+      tokens = this.generateTokensFromJSXElements(
+        singlePassResult.jsxElements,
+        singlePassResult.styledComponents,
+        sourceFile
+      );
+    }
+
+    return {
+      styledComponents: singlePassResult.styledComponents,
+      importInfo: singlePassResult.importInfo,
+      tokens,
+      typeCheckingEnabled: typeCheckingOptions.enabled,
+      typeCheckingStats,
+    };
   }
 }

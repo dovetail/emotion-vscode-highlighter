@@ -8,12 +8,22 @@ module.exports = {
     "**/*.(test|spec).ts",
   ],
   transform: {
-    "^.+\\.ts$": "ts-jest",
+    "^.+\\.ts$": ["ts-jest", {
+      tsconfig: "test/tsconfig.json"
+    }],
   },
-  collectCoverageFrom: ["src/**/*.ts", "!src/**/*.d.ts"],
+  collectCoverageFrom: [
+    "src/**/*.ts", 
+    "!src/**/*.d.ts",
+    "!src/**/*.test.ts"
+  ],
   coverageDirectory: "coverage",
   coverageReporters: ["text", "lcov", "html"],
   moduleNameMapper: {
-    "^vscode$": "<rootDir>/test/__mocks__/vscode",
+    "^vscode$": "<rootDir>/test/__mocks__/vscode.ts",
   },
+  setupFilesAfterEnv: ["<rootDir>/test/jest.setup.js"],
+  moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json"],
+  testTimeout: 30000,
+  verbose: true,
 };
