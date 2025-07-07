@@ -47,8 +47,8 @@
     "url": "https://github.com/emotion-highlighter/emotion-styled-highlighter"
   },
   "scripts": {
-    "fullInstall": "npx vsce package --dependencies && code --install-extension emotion-styled-highlighter-0.1.0.vsix",
-    "vscode:prepublish": "npm run compile",
+    "fullInstall": "yarn vsce package --dependencies && code --install-extension emotion-styled-highlighter-0.1.0.vsix",
+    "vscode:prepublish": "yarn compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "lint": "eslint src --ext ts",
@@ -69,6 +69,7 @@
     "ts-jest": "^29.1.2"
   },
   "dependencies": {
+    "@emotion/react": "^11.14.1",
     "@emotion/styled": "^11.14.1",
     "react": "^19.1.0",
     "typescript": "^5.1.6"
