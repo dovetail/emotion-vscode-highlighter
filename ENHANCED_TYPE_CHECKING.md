@@ -299,7 +299,7 @@ export default function HomePage() {
 
 ### Development Setup
 1. Clone the repository
-2. Run `npm install`
+2. Run `yarn install`
 3. Open in VS Code
 4. Press F5 to launch Extension Development Host
 5. Test with TypeScript projects

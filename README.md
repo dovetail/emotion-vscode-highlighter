@@ -24,17 +24,17 @@ cd emotion-styled-highlighter
 
 2. **Install dependencies**:
 ```bash
-npm install
+yarn install
 ```
 
 3. **Build the extension**:
 ```bash
-npm run compile
+yarn compile
 ```
 
 4. **Package and install**:
 ```bash
-npm run fullInstall
+yarn fullInstall
 ```
 
 This will create a `.vsix` file and automatically install it in VS Code.
@@ -45,7 +45,7 @@ If you prefer to do it step by step:
 
 1. **Package the extension**:
 ```bash
-npx vsce package --dependencies
+yarn vsce package --dependencies
 ```
 
 2. **Install the packaged extension**:
@@ -177,8 +177,8 @@ To test the extension in development mode:
 ```bash
 git clone https://github.com/emotion-highlighter/emotion-styled-highlighter.git
 cd emotion-styled-highlighter
-npm install
-npm run compile
+yarn install
+yarn compile
 code .
 # Press F5 to launch Extension Development Host
 ```
@@ -186,7 +186,7 @@ code .
 ### Run Tests
 
 ```bash
-npm test
+yarn test
 ```
 
 ## 🚀 Performance
@@ -221,16 +221,16 @@ npm test
 2. Create a feature branch: `git checkout -b feature/amazing-feature`
 3. Make your changes
 4. Add tests for new functionality
-5. Run tests: `npm test`
-6. Build: `npm run compile`
+5. Run tests: `yarn test`
+6. Build: `yarn compile`
 7. Submit a pull request
 
 ### Development Setup
 ```bash
 git clone <your-fork>
 cd emotion-styled-highlighter
-npm install
-npm run compile
+yarn install
+yarn compile
 code .
 # Press F5 to launch Extension Development Host
 ```
