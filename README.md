@@ -2,6 +2,14 @@
 
 A Visual Studio Code extension that provides intelligent syntax highlighting for Emotion styled components in TypeScript/JavaScript projects.
 
+## Quickly see what components are styled components
+
+![Image of button](./button.png)
+
+## Pick out the styled components even through imports
+
+![Image of form](./form.png)
+
 ## 🚀 Features
 
 - **Highlights emotion styled components** in JSX/TSX files with customizable colors
