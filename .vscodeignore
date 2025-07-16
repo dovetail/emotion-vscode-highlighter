@@ -2,6 +2,7 @@
 src/**
 test/**
 debug-examples/**
+examples/**
 *.tsx
 *.ts
 
@@ -18,7 +19,8 @@ tsconfig.json
 test-emotion-debug.*
 
 # Documentation (keep README.md, exclude others)
-IMPLEMENTATION_PLAN.md
+docs/**
+theme-configs/**
 
 # Package management
 package-lock.json
