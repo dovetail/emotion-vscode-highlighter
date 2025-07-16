@@ -259,13 +259,12 @@ code .
 
 ## 📄 License
 
-MIT License - see [LICENSE.txt](LICENSE.txt) for details.
+MIT
 
 ## 🙏 Acknowledgments
 
 - Built with VS Code's powerful extension API
 - Inspired by the Emotion and styled-components communities
-- Thanks to all contributors and users
 
 ---
 
