@@ -2,7 +2,7 @@
   "name": "emotion-styled-highlighter",
   "displayName": "Emotion Styled Component Highlighter",
   "description": "Highlights emotion styled components in JSX/TSX files for better visual distinction",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publisher": "Dovetail",
   "engines": {
     "vscode": "^1.74.0"
